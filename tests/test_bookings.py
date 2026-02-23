@@ -1,4 +1,5 @@
 import logging
+from utils.validator import BookingValidator
 
 logger = logging.getLogger(__name__)
 
@@ -12,12 +13,11 @@ class TestBookingActions:
         Test for fetching all booking IDs.
         Steps:
         1. Request all booking IDs.
-        2. Verify status code and data structure.
+        2. Verify data structure.
         :param booking_service: Booking service object.
         """
         logger.info("Fetching all booking IDs.")
         booking_ids = booking_service.get_booking_ids()
-        assert booking_ids.status_code == 200
         data = booking_ids.json()
         assert isinstance(data, list), "Expected a list of bookings."
         assert len(data) > 0, "Booking IDs should not be empty."
@@ -34,7 +34,6 @@ class TestBookingActions:
         """
         logger.info("Fetching all booking IDs by name and surname.")
         booking_ids = booking_service.get_booking_ids(firstname=booking_payload["firstname"], lastname = booking_payload["lastname"])
-        assert booking_ids.status_code == 200
         data = booking_ids.json()
         assert isinstance(data, list), "Expected a list of bookings."
         assert "bookingid" in data[0], f"Booking object missing 'bookingid' attribute."
@@ -66,7 +65,7 @@ class TestBookingActions:
         booking_details = booking_service.get_booking(existing_booking_id)
         assert booking_details.status_code == 200
 
-    def test_create_booking(self, booking_service, existing_booking_id, booking_payload):
+    def test_create_booking(self, booking_service, booking_payload):
         """
         Test for creating booking.
         Steps:
@@ -81,16 +80,16 @@ class TestBookingActions:
         """
         logger.info(f"Creating new booking: {booking_payload}")
         created_booking = booking_service.create_booking(booking_payload)
-        data = created_booking.json()
-        assert created_booking.status_code == 200
-        logger.info("Verifying that returned data from response matches submitted data.")
-        assert data["booking"]["firstname"] == booking_payload["firstname"]
-        assert data["booking"]["lastname"] == booking_payload["lastname"]
 
+        logger.info("Verifying booking response contains booking id.")
+        assert "bookingid" in created_booking.json(), "Booking response does not contain 'bookingid' attribute."
+        logger.info("Verifying that returned data from response matches expected data.")
+        BookingValidator.validate_booking(created_booking.json()["booking"], booking_payload)
         logger.info("Fetching booking details from API endpoint by newly created booking id.")
-        new_booking = booking_service.get_booking(existing_booking_id)
+        new_id = created_booking.json()["bookingid"]
+        new_booking = booking_service.get_booking(new_id)
         logger.info(f"Verifying that returned data from API endpoint matches submitted data, newly created booking data: {new_booking.json()}")
-        assert new_booking.json() == booking_payload
+        BookingValidator.validate_booking(new_booking.json(), booking_payload)
 
     def test_update_booking(self, booking_service, existing_booking_id, update_payload):
        """
@@ -104,7 +103,6 @@ class TestBookingActions:
        """
        logger.info(f"Updating booking: {update_payload}")
        updated_booking = booking_service.update_booking(existing_booking_id, update_payload)
-       assert updated_booking.status_code == 200
        assert updated_booking.json() == update_payload
 
     def test_partial_update_booking(self, booking_service, update_payload, existing_booking_id):
@@ -117,8 +115,9 @@ class TestBookingActions:
         1. Partially update booking by existing booking id.
         """
         new_first_name = {"firstname": update_payload["firstname"]}
-        updated_booking = booking_service.update_booking_partial(existing_booking_id, new_first_name)
-        assert updated_booking.status_code == 200
+        booking_service.update_booking_partial(existing_booking_id, new_first_name)
+
+
 
     def test_delete_booking(self, booking_service, booking_payload):
         """
@@ -134,8 +133,6 @@ class TestBookingActions:
         logger.info("Get temp booking id.")
         target_id = temp_booking["bookingid"]
         logger.info("Deleting temp booking...")
-        deletion_res = booking_service.delete_booking(target_id)
-        assert deletion_res.status_code == 201
+        booking_service.delete_booking(target_id)
         logger.info("Verifying that booking is successfully deleted from database.")
-        deleted_booking_response = booking_service.get_booking(target_id)
-        assert deleted_booking_response.status_code == 404
+

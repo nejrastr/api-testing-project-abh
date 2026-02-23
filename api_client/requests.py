@@ -63,3 +63,4 @@ class Requests:
         :return: A requests.Response object.
         """
         return self.session.patch(f"{self.base_api_url}{endpoint}", **kwargs)
+
