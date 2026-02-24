@@ -1,108 +1,126 @@
-from api_client.requests import Requests
 from utils.constants import BASE_API_URL, DEFAULT_JSON_HEADERS
 import logging
 
 logger = logging.getLogger(__name__)
 
-class BookingService(Requests):
+class BookingService:
     """
     Service class to handle all interactions with the Booking API.
     Inherits from Requests client.
     """
-    def __init__(self):
+    def __init__(self, client):
         """
         Init the Service class.
         """
-        super().__init__(base_url=BASE_API_URL, headers=DEFAULT_JSON_HEADERS)
+        self.client = client
+        self.client.base_url = BASE_API_URL
+        self.client.session.headers.update(DEFAULT_JSON_HEADERS)
 
     @staticmethod
     def _handle_response(response, expected_status):
+        """
+        Internal helper method to validate status codes.
+        :param response: Response from API.
+        :param expected_status: Expected status code from API.
+        :return:
+        """
         logger.info("Verifying status code matches expected status code.")
         if response.status_code != expected_status:
             raise AssertionError(f"Expected status code {expected_status}, received {response.status_code}")
         return response
 
-    def create_api_token(self, test_user: dict) ->str:
+    def create_api_token(self, test_user: dict, expected_status = 200) ->str:
         """
         Create an API token for the Booking API.
+        :param expected_status: Expected status code from API.
         :param test_user: Dictionary with test user username and password.
         :return: The authentication token for the Booking API.
         """
         path = "/auth"
-        response = self.post(path, json=test_user)
-        if response.status_code == 200:
-            token = response.json().get("token")
-            self.session.headers.update({"Cookie": f"token={token}"})
+        response = self.client.post(path, json=test_user)
+        self._handle_response(response, expected_status)
+        token = response.json()['token']
+        if token:
+            self.client.session.headers.update({"Cookie": f"token =  {token}"})
+            logger.info("Successfully added auth token to API headers.")
             return token
-        return ""
+        raise ValueError("Token not added to API headers.")
 
-    def get_booking_ids(self, **params):
+    def get_booking_ids(self, expected_status = 200,**params):
         """
         Get all booking ids.
+        :param expected_status: Expected status code from API.
         :param params: Optional parameters for filtering booking ids.
         :return: A list of booking ids.
         """
         path = "/booking"
-        booking_ids_response = self.get(path, params=params)
-        return self._handle_response(booking_ids_response, 200)
+        booking_ids_response = self.client.get(path, params=params)
+        return self._handle_response(booking_ids_response, expected_status)
 
-    def get_booking(self, booking_id: int):
+    def get_booking(self, booking_id: int, expected_status = 200):
         """
         Get a specific booking details.
+        :param expected_status: Expected status code from API.
         :param booking_id: The unique booking id to get.
         :return: Dictionary with booking details.
         """
         path = f"/booking/{booking_id}"
-        booking = self.get(path)
-        return self._handle_response(booking, 200)
+        booking = self.client.get(path)
+        return self._handle_response(booking, expected_status)
 
-    def create_booking(self, booking_data: dict):
+    def create_booking(self, booking_data: dict, expected_status = 200):
         """
         Create a new booking.
+        :param expected_status: Expected status code from API.
         :param booking_data: Dictionary with booking details.
         :return: Dictionary of created booking details.
         """
         path = "/booking"
-        new_booking = self.post(path, json=booking_data)
-        return self._handle_response(new_booking, 200)
+        new_booking = self.client.post(path, json=booking_data)
+        return self._handle_response(new_booking, expected_status)
 
-    def update_booking(self, booking_id: int, booking_data: dict) -> dict:
+    def update_booking(self, booking_id: int, booking_data: dict, partial = False, expected_status = 200) -> dict:
         """
-        Update a booking details.
-        :param booking_id: The unique booking id to update.
-        :param booking_data: The new booking details.
-        :return: The updated booking details.
+        Update a booking details partially or fully based on flag partial.
+        :param booking_id: ID of the booking to update.
+        :param booking_data: Booking details to update.
+        :param partial: Flag to indicate whether to update partially.
+        :param expected_status: Expected status code from API.
+        :return: dictionary with updated booking details.
         """
+        method = self.client.patch if partial else self.client.put
         path = f"/booking/{booking_id}"
-        update_response = self.patch(path, json=booking_data)
-        return self._handle_response(update_response, 200)
+        update_response = method(path, json=booking_data)
+        return self._handle_response(update_response, expected_status)
 
-    def update_booking_partial(self, booking_id: int, booking_data: dict) -> dict:
-        """
-        Update a booking partial details.
-        :param booking_id: The unique booking id to update.
-        :param booking_data: The specific fields to update.
-        :return: The updated booking details.
-        """
-        path = f"/booking/{booking_id}"
-        partial_update_response = self.patch(path, json=booking_data)
-        return self._handle_response(partial_update_response, 200)
-
-    def delete_booking(self, booking_id: int):
+    def delete_booking(self, booking_id: int, expected_status = 201):
         """
         Delete a booking details.
+        :param expected_status: Expected status code from API.
         :param booking_id: The unique booking id to delete.
         :return: Status string 'Created'
         """
         path = f"/booking/{booking_id}"
-        delete_response = self.delete(path)
-        return self._handle_response(delete_response, 201)
+        logger.info(f"Headers before delete: {self.client.session.headers}")
+        delete_response = self.client.delete(path)
+        return self._handle_response(delete_response, expected_status)
 
-    def health_check(self):
+    def health_check(self, expected_status = 200):
         """
         Health check endpoint.
         :return: Status string 'Created'
         """
         path ="/ping"
-        ping_response = self.get(path)
-        return self._handle_response(ping_response, 200)
+        ping_response = self.client.get(path)
+        return self._handle_response(ping_response, expected_status)
+
+    @staticmethod
+    def validate_data(actual_data, expected_data):
+        """
+        Method to validate the data passed.
+        :param actual_data: Data that is returned from the API.
+        :param expected_data: Test data that is expected to be returned from the API.
+        :return:
+        """
+        for key, value in expected_data.items():
+            actual_data[key] = value

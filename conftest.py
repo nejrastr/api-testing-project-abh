@@ -1,5 +1,7 @@
 import pytest
+from api_client.requests import Requests
 from utils.booking_service import BookingService
+from utils.constants import BASE_API_URL
 from data.test_data import BOOKING_DATA, USER_DATA, UPDATE_BOOKING_DATA
 
 @pytest.fixture(scope="session")
@@ -22,13 +24,17 @@ def booking_service(user_data):
     """
     Provides an authenticated booking service object.
     """
-    service = BookingService()
-    service.create_api_token(user_data)
-    return service
+    client = Requests(BASE_API_URL)
+    booking_service = BookingService(client)
+    booking_service.create_api_token(user_data)
+    return booking_service
 
 @pytest.fixture(scope="function")
 def existing_booking_id(booking_service):
-
+    """
+    Gets an existing booking ID.
+    :param booking_service: An instance of the BookingService class.
+    """
     # Create new booking
     new_booking = booking_service.create_booking(BOOKING_DATA)
     booking_id = new_booking.json()['bookingid']
