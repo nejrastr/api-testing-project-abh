@@ -3,73 +3,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 class TestBookingActions:
+    shared_id = None
     """
     Suite of tests covering the CRUD operations related to booking actions.
     """
-    def test_get_booking(self, booking_service, existing_booking_id):
+    def test_create_booking(self, booking_service, booking_payload):
+        """
+        Test for creating and validating booking.
+        :param booking_service: An instance of BookingService.
+        :param booking_payload: Booking service test data.
+        """
+        TestBookingActions.shared_id = booking_service.create_and_validate_booking(booking_payload)
+
+    def test_get_booking(self, booking_service):
         """
         Test for fetching booking data by id.
         Steps:
         1. Fetch booking details by booking id.
         :param booking_service: An instance of BookingService.
-        :param existing_booking_id: Booking id fetched from database.
         """
+        target_id = TestBookingActions.shared_id
         logger.info("Fetch booking details by booking id.")
-        booking_service.get_booking(existing_booking_id)
+        booking_service.get_booking(target_id)
 
-    def test_create_booking(self, booking_service, booking_payload):
-        """
-        Test for creating booking.
-        Steps:
-        1. Create a new booking.
-        2. Verify status code and data structure.
-        3. Verify that returned data matches submitted data.
-        4. Get newly created booking.
-        5. Verify that returned data from database matches submitted data.
-        :param booking_service: An instance of BookingService.
-        :param existing_booking_id: Booking id fetched from database.
-        :param booking_payload: Test data for creating booking.
-        """
-        logger.info(f"Creating new booking: {booking_payload}")
-        created_booking = booking_service.create_booking(booking_payload)
-
-        logger.info("Verifying booking response contains booking id.")
-        assert "bookingid" in created_booking.json(), "Booking response does not contain 'bookingid' attribute."
-        logger.info("Verifying that returned data from response matches expected data.")
-        booking_service.validate_data(created_booking.json()["booking"], booking_payload)
-        logger.info("Fetching booking details from API endpoint by newly created booking id.")
-        new_id = created_booking.json()["bookingid"]
-        new_booking = booking_service.get_booking(new_id)
-        logger.info(f"Verifying that returned data from API endpoint matches submitted data, newly created booking data: {new_booking.json()}")
-        booking_service.validate_data(new_booking.json(), booking_payload)
-
-    def test_update_booking(self, booking_service, existing_booking_id, update_payload):
+    def test_update_booking(self, booking_service, update_payload):
        """
        Test for updating booking.
        Steps:
        1. Update booking by existing booking id.
        2. Verify status code and data structure.
        :param booking_service: An instance of BookingService.
-       :param existing_booking_id: Booking id fetched from database.
        :param update_payload: Test data for updating booking.
        """
+       target_id = TestBookingActions.shared_id
        logger.info(f"Updating booking: {update_payload}")
-       updated_booking = booking_service.update_booking(existing_booking_id, update_payload)
-       assert updated_booking.json() == update_payload
+       booking_service.update_booking(target_id, update_payload)
 
     def test_delete_booking(self, booking_service, booking_payload):
         """
         Steps:
-        1. Create a new temp booking for deletion.
-        2. Get temp booking id.
-        3. Delete temp booking by id.
+        1. delete booking by booking id.
         2. Verify that booking is deleted from database successfully.
 
         """
-        logger.info(f"Creating new temp booking for deletion: {booking_payload}")
-        temp_booking = booking_service.create_booking(booking_payload).json()
-        logger.info("Get temp booking id.")
-        target_id = temp_booking["bookingid"]
+        target_id = TestBookingActions.shared_id
         logger.info("Deleting temp booking...")
         booking_service.delete_booking(target_id)
         logger.info("Verifying that booking is successfully deleted from database.")

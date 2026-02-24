@@ -4,11 +4,6 @@ from utils.booking_service import BookingService
 from utils.constants import BASE_API_URL
 from data.test_data import BOOKING_DATA, USER_DATA, UPDATE_BOOKING_DATA
 
-@pytest.fixture(scope="session")
-def user_data():
-    """Returns static user credentials for authentication."""
-    return USER_DATA
-
 @pytest.fixture(scope="function")
 def booking_payload():
     """Returns the standard template for creating a booking."""
@@ -20,24 +15,11 @@ def update_payload():
     return UPDATE_BOOKING_DATA
 
 @pytest.fixture(scope="function")
-def booking_service(user_data):
+def booking_service():
     """
     Provides an authenticated booking service object.
     """
     client = Requests(BASE_API_URL)
     booking_service = BookingService(client)
-    booking_service.create_api_token(user_data)
+    booking_service.create_api_token(USER_DATA)
     return booking_service
-
-@pytest.fixture(scope="function")
-def existing_booking_id(booking_service):
-    """
-    Gets an existing booking ID.
-    :param booking_service: An instance of the BookingService class.
-    """
-    # Create new booking
-    new_booking = booking_service.create_booking(BOOKING_DATA)
-    booking_id = new_booking.json()['bookingid']
-    yield booking_id
-    # Clean up the database
-    booking_service.delete_booking(booking_id)

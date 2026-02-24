@@ -124,3 +124,30 @@ class BookingService:
         """
         for key, value in expected_data.items():
             actual_data[key] = value
+
+    def create_and_validate_booking(self, booking_payload: dict):
+        """
+        Method for booking creation and validation.
+        Steps:
+        1. Create a new booking.
+        2. Validate that booking response contains bookingid
+        3. Validate booking response data
+        4. Fetch new booking by bookingid from GET endpoint.
+        5. Validate that data returned from GET endpoint matches expected data.
+        :param booking_payload:
+        :return:
+        """
+        logger.info(f"Creating new booking: {booking_payload}")
+        created_booking = self.create_booking(booking_payload)
+
+        logger.info("Verifying booking response contains booking id.")
+        assert "bookingid" in created_booking.json(), "Booking response does not contain 'bookingid' attribute."
+        logger.info("Verifying that returned data from response matches expected data.")
+        self.validate_data(created_booking.json()["booking"], booking_payload)
+        logger.info("Fetching booking details from API endpoint by newly created booking id.")
+        new_id = created_booking.json()["bookingid"]
+        new_booking = self.get_booking(new_id)
+        logger.info(
+            f"Verifying that returned data from API endpoint matches submitted data, newly created booking data: {new_booking.json()}")
+        self.validate_data(new_booking.json(), booking_payload)
+        return new_id
