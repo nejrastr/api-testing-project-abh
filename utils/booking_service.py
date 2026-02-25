@@ -1,5 +1,6 @@
 from utils.constants import BASE_API_URL, DEFAULT_JSON_HEADERS
 import logging
+from api_client.requests import Requests
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +9,7 @@ class BookingService:
     Service class to handle all interactions with the Booking API.
     Inherits from Requests client.
     """
-    def __init__(self, client):
+    def __init__(self, client: Requests):
         """
         Init the Service class.
         """
@@ -27,7 +28,9 @@ class BookingService:
         logger.info("Verifying status code matches expected status code.")
         if response.status_code != expected_status:
             raise AssertionError(f"Expected status code {expected_status}, received {response.status_code}")
-        return response
+        if "application/json" in response.headers.get("Content-Type", ""):
+            return response.json()
+        return response.text
 
     def create_api_token(self, test_user: dict, expected_status = 200) ->str:
         """
@@ -41,7 +44,7 @@ class BookingService:
         self._handle_response(response, expected_status)
         token = response.json()['token']
         if token:
-            self.client.session.headers.update({"Cookie": f"token =  {token}"})
+            self.client.session.headers.update({"Cookie": f"token={token}"})
             logger.info("Successfully added auth token to API headers.")
             return token
         raise ValueError("Token not added to API headers.")
@@ -68,6 +71,16 @@ class BookingService:
         booking = self.client.get(path)
         return self._handle_response(booking, expected_status)
 
+    def get_and_validate_booking(self, booking_id: int, booking_payload: dict):
+        """
+        Method to get and validate a booking details.
+        :param booking_id: Booking ID.
+        :param booking_payload: Test booking data.
+        """
+        booking = self.get_booking(booking_id)
+        self.validate_data(booking ,booking_payload)
+        return booking
+
     def create_booking(self, booking_data: dict, expected_status = 200):
         """
         Create a new booking.
@@ -92,6 +105,19 @@ class BookingService:
         path = f"/booking/{booking_id}"
         update_response = method(path, json=booking_data)
         return self._handle_response(update_response, expected_status)
+
+    def update_and_validate_booking(self, booking_id: int, update_booking_data: dict, partial = False):
+        """
+        Method to update and validate a booking details.
+        :param booking_id: Booking ID.
+        :param update_booking_data: Test data for updating booking details.
+        :param partial: Flag to indicate whether to update partially or fully.
+        :return: Updated booking object.
+        """
+        updated_booking = self.update_booking(booking_id, update_booking_data, partial)
+        self.validate_data(updated_booking, update_booking_data)
+        return updated_booking
+
 
     def delete_booking(self, booking_id: int, expected_status = 201):
         """
@@ -123,7 +149,10 @@ class BookingService:
         :return:
         """
         for key, value in expected_data.items():
-            actual_data[key] = value
+            assert actual_data[key] == value, (
+                f"Data mismatch for key '{key}': "
+                f"Expected {value}, but got {actual_data[key]}"
+            )
 
     def create_and_validate_booking(self, booking_payload: dict):
         """
@@ -141,13 +170,20 @@ class BookingService:
         created_booking = self.create_booking(booking_payload)
 
         logger.info("Verifying booking response contains booking id.")
-        assert "bookingid" in created_booking.json(), "Booking response does not contain 'bookingid' attribute."
+        assert "bookingid" in created_booking, "Booking response does not contain 'bookingid' attribute."
         logger.info("Verifying that returned data from response matches expected data.")
-        self.validate_data(created_booking.json()["booking"], booking_payload)
+        self.validate_data(created_booking["booking"], booking_payload)
         logger.info("Fetching booking details from API endpoint by newly created booking id.")
-        new_id = created_booking.json()["bookingid"]
+        new_id = created_booking["bookingid"]
         new_booking = self.get_booking(new_id)
         logger.info(
-            f"Verifying that returned data from API endpoint matches submitted data, newly created booking data: {new_booking.json()}")
-        self.validate_data(new_booking.json(), booking_payload)
+            f"Verifying that returned data from API endpoint matches submitted data, newly created booking data: {new_booking}")
+        self.validate_data(new_booking, booking_payload)
         return new_id
+
+    def create_multiple_bookings(self, booking_payload: list):
+        """
+        Method for creating multiple bookings.
+        :param booking_payload: Test data with multiple bookings.
+        """
+        return [self.create_booking(booking) for booking in booking_payload]
