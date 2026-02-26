@@ -187,16 +187,35 @@ class BookingService:
         self.validate_data(new_booking, booking_payload)
         return new_id
 
+    def get_and_validate_booking_list(self):
+        """
+        Method for validating booking id's are available in all bookings.
+        """
+        logger.info("Fetching all booking list from API endpoint.")
+        all_bookings = self.get_booking_ids()
+        target_ids = self.get_test_data("newly_created_booking_ids")
+        if not target_ids:
+            pytest.fail("No created booking ids provided.")
+
+        all_booking_ids = [item['bookingid'] for item in all_bookings]
+
+        for target_id in target_ids:
+            assert target_id in all_booking_ids, "Booking id not available in all bookings."
+            logger.info(f"Verified that {target_id} is available in all bookings.")
+
+
     def create_and_validate_multiple_bookings(self, booking_payload: dict):
         """
         Method for creating and validating multiple bookings.
         :param booking_payload: Test data for multiple bookings.
         """
+        created_ids = []
         for booking in booking_payload:
             logger.info(f"Creating new booking with name: {booking['firstname']} and last name: {booking['lastname']}")
-            self.create_and_validate_booking(booking)
-
-
+            booking_id = self.create_and_validate_booking(booking)
+            created_ids.append(booking_id)
+        self.set_test_data("newly_created_booking_ids", created_ids)
+        return created_ids
 
     def create_multiple_bookings(self, booking_payload: list):
         """
@@ -241,3 +260,20 @@ class BookingService:
             logger.info(f"Verifying integrity for remaining booking: {keep_id}")
             remaining_booking = self.get_booking(keep_id, 200)
             self.validate_data(original_booking, remaining_booking)
+
+    def booking_data_cleanup(self):
+        """
+        Attempts to delete all bookings in the database.
+        """
+        logger.info("Starting global database cleanup...")
+        all_bookings = self.get_booking_ids()
+        all_booking_ids = [booking["bookingid"] for booking in all_bookings]
+
+        logger.info(f"Found {len(all_booking_ids)} bookings to delete.")
+
+        for booking_id in all_booking_ids:
+            try:
+                self.delete_booking(booking_id, 201)
+                logger.info(f"Deleted booking ID: {booking_id}")
+            except Exception as e:
+                logger.warning(f"Could not delete ID {booking_id}: {e}")
