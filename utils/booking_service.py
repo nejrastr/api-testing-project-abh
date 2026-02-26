@@ -1,0 +1,279 @@
+import pytest
+
+from utils.constants import BASE_API_URL, DEFAULT_JSON_HEADERS
+import logging
+from api_client.requests import Requests
+
+logger = logging.getLogger(__name__)
+
+class BookingService:
+    """
+    Service class to handle all interactions with the Booking API.
+    Inherits from Requests client.
+    """
+    _test_data = {}
+    def __init__(self, client: Requests):
+        """
+        Init the Service class.
+        """
+        self.client = client
+        self.client.base_url = BASE_API_URL
+        self.client.session.headers.update(DEFAULT_JSON_HEADERS)
+
+    @staticmethod
+    def _handle_response(response, expected_status):
+        """
+        Internal helper method to validate status codes.
+        :param response: Response from API.
+        :param expected_status: Expected status code from API.
+        :return:
+        """
+        logger.info("Verifying status code matches expected status code.")
+        if response.status_code != expected_status:
+            raise AssertionError(f"Expected status code {expected_status}, received {response.status_code}")
+        if "application/json" in response.headers.get("Content-Type", ""):
+            return response.json()
+        return response.text
+
+    def create_api_token(self, test_user: dict, expected_status = 200) ->str:
+        """
+        Create an API token for the Booking API.
+        :param expected_status: Expected status code from API.
+        :param test_user: Dictionary with test user username and password.
+        :return: The authentication token for the Booking API.
+        """
+        path = "/auth"
+        response = self.client.post(path, json=test_user)
+        self._handle_response(response, expected_status)
+        token = response.json()['token']
+        if token:
+            self.client.session.headers.update({"Cookie": f"token={token}"})
+            logger.info("Successfully added auth token to API headers.")
+            return token
+        raise ValueError("Token not added to API headers.")
+
+    def get_booking_ids(self, expected_status = 200,**params):
+        """
+        Get all booking ids.
+        :param expected_status: Expected status code from API.
+        :param params: Optional parameters for filtering booking ids.
+        :return: A list of booking ids.
+        """
+        path = "/booking"
+        booking_ids_response = self.client.get(path, params=params)
+        return self._handle_response(booking_ids_response, expected_status)
+
+    def get_booking(self, booking_id: int, expected_status = 200):
+        """
+        Get a specific booking details.
+        :param expected_status: Expected status code from API.
+        :param booking_id: The unique booking id to get.
+        :return: Dictionary with booking details.
+        """
+        path = f"/booking/{booking_id}"
+        booking = self.client.get(path)
+        return self._handle_response(booking, expected_status)
+
+    def get_and_validate_booking(self, booking_id: int, booking_payload: dict):
+        """
+        Method to get and validate a booking details.
+        :param booking_id: Booking ID.
+        :param booking_payload: Test booking data.
+        """
+        booking = self.get_booking(booking_id)
+        self.validate_data(booking ,booking_payload)
+        return booking
+
+    def create_booking(self, booking_data: dict, expected_status = 200):
+        """
+        Create a new booking.
+        :param expected_status: Expected status code from API.
+        :param booking_data: Dictionary with booking details.
+        :return: Dictionary of created booking details.
+        """
+        path = "/booking"
+        new_booking = self.client.post(path, json=booking_data)
+        return self._handle_response(new_booking, expected_status)
+
+    def update_booking(self, booking_id: int, booking_data: dict, partial = False, expected_status = 200) -> dict:
+        """
+        Update a booking details partially or fully based on flag partial.
+        :param booking_id: ID of the booking to update.
+        :param booking_data: Booking details to update.
+        :param partial: Flag to indicate whether to update partially.
+        :param expected_status: Expected status code from API.
+        :return: dictionary with updated booking details.
+        """
+        method = self.client.patch if partial else self.client.put
+        path = f"/booking/{booking_id}"
+        update_response = method(path, json=booking_data)
+        return self._handle_response(update_response, expected_status)
+
+    def update_and_validate_booking(self, booking_id: int, update_booking_data: dict, partial = False):
+        """
+        Method to update and validate a booking details.
+        :param booking_id: Booking ID.
+        :param update_booking_data: Test data for updating booking details.
+        :param partial: Flag to indicate whether to update partially or fully.
+        :return: Updated booking object.
+        """
+        updated_booking = self.update_booking(booking_id, update_booking_data, partial)
+        self.validate_data(updated_booking, update_booking_data)
+        return updated_booking
+
+
+    def delete_booking(self, booking_id: int, expected_status = 201):
+        """
+        Delete a booking details.
+        :param expected_status: Expected status code from API.
+        :param booking_id: The unique booking id to delete.
+        :return: Status string 'Created'
+        """
+        path = f"/booking/{booking_id}"
+        logger.info(f"Headers before delete: {self.client.session.headers}")
+        delete_response = self.client.delete(path)
+        return self._handle_response(delete_response, expected_status)
+
+    def health_check(self, expected_status = 200):
+        """
+        Health check endpoint.
+        :return: Status string 'Created'
+        """
+        path ="/ping"
+        ping_response = self.client.get(path)
+        return self._handle_response(ping_response, expected_status)
+
+    @staticmethod
+    def validate_data(actual_data, expected_data):
+        """
+        Method to validate the data passed.
+        :param actual_data: Data that is returned from the API.
+        :param expected_data: Test data that is expected to be returned from the API.
+        :return:
+        """
+        for key, value in expected_data.items():
+            assert key in actual_data, f"Key '{key}' is missing from the API response!"
+            logger.info(f"Verified that actual data key exist: {key}")
+            assert actual_data[key] == value, (
+                f"Data mismatch for key '{key}': "
+                f"Expected {value}, but got {actual_data[key]}"
+             )
+            logger.info(f"Verified that actual data value matches expected value: {value}")
+
+    def create_and_validate_booking(self, booking_payload: dict):
+        """
+        Method for booking creation and validation.
+        Steps:
+        1. Create a new booking.
+        2. Validate that booking response contains bookingid
+        3. Validate booking response data
+        4. Fetch new booking by bookingid from GET endpoint.
+        5. Validate that data returned from GET endpoint matches expected data.
+        :param booking_payload:
+        :return:
+        """
+        logger.info(f"Creating new booking: {booking_payload}")
+        created_booking = self.create_booking(booking_payload)
+
+        logger.info("Verifying booking response contains booking id.")
+        assert "bookingid" in created_booking, "Booking response does not contain 'bookingid' attribute."
+        logger.info("Verifying that returned data from response matches expected data.")
+        self.validate_data(created_booking["booking"], booking_payload)
+        logger.info("Fetching booking details from API endpoint by newly created booking id.")
+        new_id = created_booking["bookingid"]
+        new_booking = self.get_booking(new_id)
+        logger.info(
+            f"Verifying that returned data from API endpoint matches submitted data, newly created booking data: {new_booking}")
+        self.validate_data(new_booking, booking_payload)
+        return new_id
+
+    def get_and_validate_booking_list(self):
+        """
+        Method for validating booking id's are available in all bookings.
+        """
+        logger.info("Fetching all booking list from API endpoint.")
+        all_bookings = self.get_booking_ids()
+        target_ids = self.get_test_data("newly_created_booking_ids")
+        if not target_ids:
+            pytest.fail("No created booking ids provided.")
+
+        all_booking_ids = [item['bookingid'] for item in all_bookings]
+
+        for target_id in target_ids:
+            assert target_id in all_booking_ids, "Booking id not available in all bookings."
+            logger.info(f"Verified that {target_id} is available in all bookings.")
+
+
+    def create_and_validate_multiple_bookings(self, booking_payload: dict):
+        """
+        Method for creating and validating multiple bookings.
+        :param booking_payload: Test data for multiple bookings.
+        """
+        created_ids = []
+        for booking in booking_payload:
+            logger.info(f"Creating new booking with name: {booking['firstname']} and last name: {booking['lastname']}")
+            booking_id = self.create_and_validate_booking(booking)
+            created_ids.append(booking_id)
+        self.set_test_data("newly_created_booking_ids", created_ids)
+        return created_ids
+
+    def create_multiple_bookings(self, booking_payload: list):
+        """
+        Method for creating multiple bookings.
+        :param booking_payload: Test data with multiple bookings.
+        """
+        return [self.create_booking(booking) for booking in booking_payload]
+
+    def set_test_data(self, key, value):
+        """
+        Stored a value in the global _test_data dictionary.
+        :param key: Key of the value.
+        :param value:  Value saved to the global _test_data.
+        """
+        self._test_data[key] = value
+
+    def get_test_data(self, key):
+        """
+        Get a value from the global _test_data dictionary.
+        :param key: Value that is fetched from the global _test_data dictionary.
+        :return: Key value.
+        """
+        return self._test_data.get(key)
+
+    def delete_and_validate_remaining_bookings_from_booking_list(self, bookings: list):
+        """
+        Method to delete one and validate remaining bookings from booking list.
+        :param bookings: Booking data with created multiple bookings.
+        """
+        booking_to_delete = bookings[1]["bookingid"]
+        bookings_to_keep = [b for b in bookings if b["bookingid"] != booking_to_delete]
+
+        logger.info(f"Deleting booking {booking_to_delete}")
+        self.delete_booking(booking_to_delete, 201)
+        logger.info(f"Verify booking {booking_to_delete} was deleted.")
+        self.get_booking(booking_to_delete, 404)
+
+        for expected_booking in bookings_to_keep:
+            keep_id = expected_booking["bookingid"]
+            original_booking = expected_booking["booking"]
+
+            logger.info(f"Verifying integrity for remaining booking: {keep_id}")
+            remaining_booking = self.get_booking(keep_id, 200)
+            self.validate_data(original_booking, remaining_booking)
+
+    def booking_data_cleanup(self):
+        """
+        Attempts to delete all bookings in the database.
+        """
+        logger.info("Starting global database cleanup...")
+        all_bookings = self.get_booking_ids()
+        all_booking_ids = [booking["bookingid"] for booking in all_bookings]
+
+        logger.info(f"Found {len(all_booking_ids)} bookings to delete.")
+
+        for booking_id in all_booking_ids:
+            try:
+                self.delete_booking(booking_id, 201)
+                logger.info(f"Deleted booking ID: {booking_id}")
+            except Exception as e:
+                logger.warning(f"Could not delete ID {booking_id}: {e}")
