@@ -23,6 +23,18 @@ class TestGetBookings:
         if len(booking_ids) > 0:
          assert "bookingid" in booking_ids[0], "Booking object missing 'bookingid' attribute."
 
+    def test_create_and_validate_multiple_bookings(self, booking_service, bookings_payload):
+        """
+        Test for creating multiple bookings and validating integrity.
+        :param booking_service: An instance of Booking service object.
+        :param bookings_payload: Test data for multiple bookings creation.
+        """
+        list_of_bookings = booking_service.create_and_validate_multiple_bookings(bookings_payload)
+        assert list_of_bookings is not None, "Failed to create multiple bookings."
+        booking_service.get_and_validate_booking_list()
+        booking_service.booking_data_cleanup()
+
+
     def test_get_booking_ids_by_name_and_surname(self, booking_service, temp_booking):
         """
         Test for checking that booking ids can be filtered by name and surname.
@@ -56,28 +68,13 @@ class TestGetBookings:
         if len(booking_ids) > 0:
          assert "bookingid" in booking_ids[0], f"Booking object missing 'bookingid' attribute."
 
-    def test_delete_integrity(self, booking_service, booking_payload):
+    def test_creation_deletion_validations_on_multiple_bookings(self, booking_service, bookings_payload):
         """
-        Test for validating deleted booking integrity.
+        Test for creating multiple bookings and validating deleted booking integrity.
         :param booking_service: An instance of Booking service object.
-        :param booking_payload: Booking data payload object.
+        :param bookings_payload: Test data with multiple bookings.
         """
-        bookings = booking_service.create_multiple_bookings(booking_payload)
+        bookings = booking_service.create_multiple_bookings(bookings_payload)
         assert isinstance(bookings, list), "Expected a list of bookings."
         assert len(bookings) == 4, "Failed to create all initial bookings."
-
-        booking_to_delete = bookings[1]["bookingid"]
-        bookings_to_keep = [b for b in bookings if b["bookingid"] != booking_to_delete]
-
-        logger.info(f"Deleting booking {booking_to_delete}")
-        booking_service.delete_booking(booking_to_delete, 201)
-        logger.info(f"Verify booking {booking_to_delete} was deleted.")
-        booking_service.get_booking(booking_to_delete, 404)
-
-        for expected_booking in bookings_to_keep:
-            keep_id = expected_booking["bookingid"]
-            original_booking = expected_booking["booking"]
-
-            logger.info(f"Verifying integrity for remaining booking: {keep_id}")
-            remaining_booking = booking_service.get_booking(keep_id, 200)
-            booking_service.validate_data(original_booking, remaining_booking)
+        booking_service.delete_and_validate_remaining_bookings_from_booking_list(bookings)

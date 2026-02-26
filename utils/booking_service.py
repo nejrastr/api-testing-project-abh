@@ -1,3 +1,5 @@
+import pytest
+
 from utils.constants import BASE_API_URL, DEFAULT_JSON_HEADERS
 import logging
 from api_client.requests import Requests
@@ -9,6 +11,7 @@ class BookingService:
     Service class to handle all interactions with the Booking API.
     Inherits from Requests client.
     """
+    _test_data = {}
     def __init__(self, client: Requests):
         """
         Init the Service class.
@@ -149,10 +152,13 @@ class BookingService:
         :return:
         """
         for key, value in expected_data.items():
+            assert key in actual_data, f"Key '{key}' is missing from the API response!"
+            logger.info(f"Verified that actual data key exist: {key}")
             assert actual_data[key] == value, (
                 f"Data mismatch for key '{key}': "
                 f"Expected {value}, but got {actual_data[key]}"
-            )
+             )
+            logger.info(f"Verified that actual data value matches expected value: {value}")
 
     def create_and_validate_booking(self, booking_payload: dict):
         """
@@ -181,9 +187,57 @@ class BookingService:
         self.validate_data(new_booking, booking_payload)
         return new_id
 
+    def create_and_validate_multiple_bookings(self, booking_payload: dict):
+        """
+        Method for creating and validating multiple bookings.
+        :param booking_payload: Test data for multiple bookings.
+        """
+        for booking in booking_payload:
+            logger.info(f"Creating new booking with name: {booking['firstname']} and last name: {booking['lastname']}")
+            self.create_and_validate_booking(booking)
+
+
+
     def create_multiple_bookings(self, booking_payload: list):
         """
         Method for creating multiple bookings.
         :param booking_payload: Test data with multiple bookings.
         """
         return [self.create_booking(booking) for booking in booking_payload]
+
+    def set_test_data(self, key, value):
+        """
+        Stored a value in the global _test_data dictionary.
+        :param key: Key of the value.
+        :param value:  Value saved to the global _test_data.
+        """
+        self._test_data[key] = value
+
+    def get_test_data(self, key):
+        """
+        Get a value from the global _test_data dictionary.
+        :param key: Value that is fetched from the global _test_data dictionary.
+        :return: Key value.
+        """
+        return self._test_data.get(key)
+
+    def delete_and_validate_remaining_bookings_from_booking_list(self, bookings: list):
+        """
+        Method to delete one and validate remaining bookings from booking list.
+        :param bookings: Booking data with created multiple bookings.
+        """
+        booking_to_delete = bookings[1]["bookingid"]
+        bookings_to_keep = [b for b in bookings if b["bookingid"] != booking_to_delete]
+
+        logger.info(f"Deleting booking {booking_to_delete}")
+        self.delete_booking(booking_to_delete, 201)
+        logger.info(f"Verify booking {booking_to_delete} was deleted.")
+        self.get_booking(booking_to_delete, 404)
+
+        for expected_booking in bookings_to_keep:
+            keep_id = expected_booking["bookingid"]
+            original_booking = expected_booking["booking"]
+
+            logger.info(f"Verifying integrity for remaining booking: {keep_id}")
+            remaining_booking = self.get_booking(keep_id, 200)
+            self.validate_data(original_booking, remaining_booking)
